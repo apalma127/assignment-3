@@ -1,5 +1,5 @@
 ---
-title: 'Assignment #3'
+title: 'Assignment #3 - PALMA'
 output: 
   html_document:
     toc: true
@@ -31,18 +31,13 @@ data("lending_club")
 # Data dictionary (as close as I could find): https://www.kaggle.com/wordsforthewise/lending-club/discussion/170691
 ```
 
-
-When you finish the assignment, remove the `#` from the options chunk at the top, so that messages and warnings aren't printed. If you are getting errors in your code, add `error = TRUE` so that the file knits. I would recommend not removing the `#` until you are completely finished.
-
 ## Put it on GitHub!        
-
-From now on, GitHub should be part of your routine when doing assignments. I recommend making it part of your process anytime you are working in R, but I'll make you show it's part of your process for assignments.
 
 **Task**: When you are finished with the assignment, post a link below to the GitHub repo for the assignment. Make sure the link goes to a spot in the repo where I can easily find this assignment. For example, if you have a website with a blog and post the assignment as a blog post, link to the post's folder in the repo. As an example, I've linked to my GitHub stacking material [here](https://github.com/llendway/ads_website/tree/master/_posts/2021-03-22-stacking).
 
-## Modeling
+Website Link: **_________________________________**
 
-We'll be using the `lending_club` dataset from the `modeldata` library, which is part of `tidymodels`. The data dictionary they reference doesn't seem to exist anymore, but it seems the one on this [kaggle discussion](https://www.kaggle.com/wordsforthewise/lending-club/discussion/170691) is pretty close. It might also help to read a bit about [Lending Club](https://en.wikipedia.org/wiki/LendingClub) before starting in on the exercises.
+## Modeling
 
 The outcome we are interested in predicting is `Class`. And according to the dataset's help page, its values are "either 'good' (meaning that the loan was fully paid back or currently on-time) or 'bad' (charged off, defaulted, or 21-120 days late)".
 
@@ -50,35 +45,110 @@ The outcome we are interested in predicting is `Class`. And according to the dat
 
 1. Explore the data, concentrating on examining distributions of variables and examining missing values. 
 
+**Quantitative Variables**
+
+```{r}
+lending_club %>% 
+  select(where(is.numeric)) %>% 
+  pivot_longer(cols = everything(),
+               names_to = "variable", 
+               values_to = "value") %>% 
+  ggplot(aes(x = value)) +
+  geom_histogram(bins = 30) +
+  facet_wrap(vars(variable), 
+             scales = "free")
+```
+
+Points of Interest:
+
+-
+-
+-
+
+
+**Categorical Variables**
+
+```{r}
+lending_club %>%
+select(where(is.factor)) %>% 
+  pivot_longer(cols = everything(),
+               names_to = "variable", 
+               values_to = "value") %>% 
+  ggplot(aes(x = value)) +
+  geom_bar() +
+  facet_wrap(vars(variable), 
+             scales = "free", 
+             nrow = 2)
+```
+
+Points of Interest:
+
+-
+-
+-
+
+```{r}
+lending_club %>%
+  count(sub_grade)
+```
+
 
 2. Split the data into training and test, putting 75\% in the training data. Stratify by `Class` (add `strata = `Class` to the `initial_split()` function).
 
 ```{r}
 set.seed(494) # for reproducibility
 
-# remove the #'s once you've defined these - this is so we all have the same name
-#lending_split <- 
+lending_split <- initial_split(lending_club, 
+                             prop = .75, starta = "Class")
 
-#lending_training <- 
-#lending_test <- 
+lending_training <- training(lending_split)
+lending_test <- testing(lending_split)
 ```
 
 
 3. Set up the recipe and the pre-processing steps to build a lasso model. Some steps you should take:
 
 * Use `step_upsample()` from the `themis` library to upsample the "bad" category so that it is 50\% of the "good" category. Do this by setting `over_ratio = .5`.
+
 * Use `step_downsample()` from the `themis` library to downsample the "good" category so the bads and goods are even - set `under_ratio = 1`. Make sure to do this step AFTER `step_upsample()`.  
+
 * Make all integer variables numeric (I'd highly recommend using `step_mutate_at()` and using the `all_numeric()` helper or this will be a lot of code). This step might seem really weird right now, but we'll want to do this for the model interpretation we'll do in a later assignment.  
+
 * Think about grouping factor variables with many levels.  
-* Make categorical variables dummy variables (make sure NOT to do this to the outcome variable).  
-* Normalize quantitative variables.  
 
 Once you have that, use `prep()`, `juice()`, and `count()` to count the number of observations in each class. They should be equal. This dataset will be used in building the model, but the data without up and down sampling will be used in evaluation.
 
 ```{r}
 set.seed(456)
 
-#lasso_recipe <- 
+lasso_recipe <- recipe(Class ~ ., 
+                       data = lending_training) %>% 
+  step_upsample(Class, over_ratio = 0.5) %>%
+  step_downsample(Class, under_ratio = 1) %>%
+  step_mutate_at(all_numeric(), 
+                fn = ~ as.numeric(.)) %>%
+  step_mutate(sub_grade = 
+                fct_relevel(
+                        case_when(
+                          sub_grade %in% ("A1", "A2", "A3", "A4", "A5")   ~ "A",
+                          sub_grade %in% ("B1", "B2", "B3", "B4", "B5")   ~ "B",
+                          sub_grade %in% ("C1", "C2", "C3", "C4", "C5")   ~ "C",
+                          sub_grade %in% ("D1", "D2", "D3", "D4", "D5")   ~ "D",
+                          sub_grade %in% ("E1", "E2", "E3", "E4", "E5")   ~ "E",
+                          sub_grade %in% ("F1", "F2", "F3", "F4", "F5")   ~ "F",
+                          sub_grade %in% ("G1", "G2", "G3", "G4", "G5")   ~ "G",
+                          TRUE ~ subgrade),
+                          "A","B","C","D","E", "F", "G")) %>%
+  step_dummy(all_nominal(), 
+             -all_outcomes()) %>% 
+  step_normalize(all_predictors(), 
+                 -all_nominal())
+```
+
+```{r}
+lasso_recipe %>% 
+  prep(lending_training) %>%
+  juice() 
 ```
 
 
