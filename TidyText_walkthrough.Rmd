@@ -1,0 +1,162 @@
+---
+title: "TidyText"
+author: "Brian Lee, Rita Liu, Aaron Salot"
+date: "28 September 2021"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+    code_download: true
+    theme: lumen
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE,
+                      error = TRUE)
+```
+
+
+
+# Resources
+
+* [Introduction to tidytext](https://cran.r-project.org/web/packages/tidytext/vignettes/tidytext.html) by Julia Silge and David Robinson. We get a lot of help from this document. 
+* [Text Mining with R](https://www.tidytextmining.com/index.html)  by Julia Silge and David Robinson. This is comprehensive overview about how to deal with text in R. 
+* [Package ‘tidytext’](https://cran.r-project.org/web/packages/tidytext/tidytext.pdf). An official document listing all the functions in tidytext and their usage.
+
+# Set Up: 
+```{r}
+library(tidytext)
+library(janeaustenr)
+library(gutenbergr)
+library(dplyr)
+library(stringr)
+library(ggplot2)
+```
+
+Here, we will use `austen_books()` to load Austen's 6 completed, published novels, mutate the dataset to obtain the chapter and line of each line. 
+```{r}
+# load materials
+original_books <- austen_books() %>%
+  group_by(book) %>%
+  mutate(line = row_number(),
+         chapter = cumsum(str_detect(text, regex("^chapter [\\divxlc]",
+                                                 ignore_case = TRUE)))) %>%
+  ungroup()
+original_books
+```
+
+# What is Tidytext and why is it useful?
+Tidytext is a package that allows for easier text analysis and gives analysts tools needed for text mining tools that can be used in conjunction with packages we already know, such as dplyr and ggplot2. The package makes the manipulation, representation, and visualization of text-driven datasets and analyses easier to manage. Tidytext also features sentiment analysis, which can help analysts draw large, general conclusions regarding the content of a given text through the creation of visualizations and through calculating numerical summaries in the realm of textual analysis such as a list of the most used words in a given text. Tidytext is essentially an extremely useful supplementary tool to be used in conjunction with packages we already know.
+
+# Use unnest_tokens() to process the data frame
+`unnest_tokens()` in tidytext helps us to split a column into shorter phrases of our choice. The arguments are as following:  
+* output: the name for the output column   
+* input: the name of input column that gets split  
+* token: how we want to split the column. Default is "words". Other options are "characters", "character_shingles", "ngrams", "skip_ngrams", "sentences", "lines", "paragraphs", "regex", "tweets" . 
+
+```{r}
+tidy_books <- original_books %>%
+  unnest_tokens(word, text)
+# token = 'regex', pattern = "Chapter|CHAPTER [\\dIVXLC]"
+tidy_books
+```
+
+
+# Using Tidytext with dplyr & Stop words
+
+```{r}
+books <- gutenberg_works() #assigning gutenberg_works to "books" so we can parse through the list of books
+oliver_twist <- gutenberg_download(730, mirror = "http://mirrors.xmission.com/gutenberg/") #downloading Oliver Twist, my book of choice
+```
+
+```{r}
+common_words_twist <- oliver_twist %>%
+  unnest_tokens(word, text) %>% #using unnest_tokens to turn sentences from each book into a long list of words for analysis, there are a total of 725,055 rows in this dataset.
+  count(word, sort = TRUE) #counting the occurrence of each word and sorting them by how often they occur. 
+
+head(common_words_twist, 15)
+```
+
+As we can see, the list of words that our code returns is quite uninteresting. For analysis, words such as "the," "and," "to," and "of," essentially filler words, are usually not too useful in terms of textual analysis. To prevent this from happening, we can get rid of the *stop words*. Stop words are a set of words that contain little useful information to analysis. In moving forward with our analysis, we can get rid of these words using dplyr to get a more useful set of words to work with.
+
+```{r}
+common_words_twist_sub <- oliver_twist %>%
+  unnest_tokens(word, text) %>% #using unnest_tokens to turn sentences from each book into a long list of words for analysis, there are a total of 725,055 rows in this dataset.
+  anti_join(stop_words, by = "word") %>% #using dplyr to get rid of stop words (explain dpyr)
+  count(word, sort = TRUE) #counting the occurrence of each word and sorting them by how often they occur.
+
+twist <- head(common_words_twist_sub, 15)
+twist
+```
+
+We can see in our table above that the entire list of 15 most-used words has completely changed after removing our stop words. Removing stop words can prove to be a useful tool in our analysis. Finally, we can use ggplot2 to visualize our results.
+
+```{r}
+twist %>% #take our list of the top 15 most commonly used words
+  ggplot(aes(y = reorder(word,n), x = n)) +
+  labs(x = "Number of times used",
+       y = "Word",
+       title = "Most commonly used words in Olver Twist",
+       subtitle = "It seems as though the words 'oliver,' 'replied', and 'bumble' appear the most in the novel.") +
+  theme_minimal() +
+  geom_col() #create a bar graph
+```
+
+
+# Use bind_tf_idf to get term frequency and importance
+`use_bind_tf_idf`can be used to find term frequency and inverse document frequency of a tidy text dataset.Term frequency shows the frequency the word is used in a book. Inverse term frequency indicates number of documents in the coolection that contain the word. The multiply of tf and idf is often used to show how important a word is to a document in a collection. For more information about tf and idf, you can look at [this](https://en.wikipedia.org/wiki/Tf%E2%80%93idf).   
+The arguments are as following:   
+
+* term: the column name that contains the term  
+* document: column name that contains name or ID of the documents  
+* n: column name that contains the counts of the term
+
+```{r}
+tidy_books %>% 
+  count(book, word, sort = TRUE) %>% 
+  anti_join(stop_words) %>% 
+  bind_tf_idf(word, book, n) %>%
+  arrange(desc(tf_idf))
+```
+
+
+# get_sentiments() 
+
+<br> The get_sentiments is a function that allows us to get specific sentiment lexicons with appropriate categories for the words. The three general purpose lexicons are AFINN, bing, nrc: 
+
+  # AFINN - a lexicon measuring sentiment with a numeric score between -5 and +5
+  # Bing - A binary approach that divides words into either "positive" or "negative"
+  # NRC - categorizes words in a binary fashion ("yes"/"no") into categories of positive, negative, anger, anticipation, disgust, fear, joy, sadness, surprise, and trust. 
+
+```{r}
+positive <- get_sentiments("bing") %>% 
+  filter(sentiment == "positive") # This filters the entire dataset to look for unigrams (single words) that have positive connotations
+positive
+```
+
+```{r}
+cleaned_books <- tidy_books %>%
+  anti_join(stop_words %>% filter(lexicon == "SMART"),
+            by = 'word')
+cleaned_books
+```
+
+
+```{r}
+cleaned_books %>% 
+  semi_join(positive, by = "word") %>%
+  count(word, sort = TRUE) %>%
+  slice(0:15) %>% 
+  ggplot(aes(x = n , y = reorder(word,n))) +
+  geom_col()
+  
+  
+```
+
+
+# Application Uses 
+Think about scenarios that we can use tidytext to process information? Why it is useful? Can you think of limitation of it? 
+
