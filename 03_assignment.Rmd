@@ -35,7 +35,7 @@ data("lending_club")
 
 **Task**: When you are finished with the assignment, post a link below to the GitHub repo for the assignment. Make sure the link goes to a spot in the repo where I can easily find this assignment. For example, if you have a website with a blog and post the assignment as a blog post, link to the post's folder in the repo. As an example, I've linked to my GitHub stacking material [here](https://github.com/llendway/ads_website/tree/master/_posts/2021-03-22-stacking).
 
-Website Link: **_________________________________**
+Website Link: **https://github.com/apalma127/assignment-3**
 
 ## Modeling
 
@@ -127,18 +127,18 @@ lasso_recipe <- recipe(Class ~ .,
   step_downsample(Class, under_ratio = 1) %>%
   step_mutate_at(all_numeric(), 
                 fn = ~ as.numeric(.)) %>%
-  step_mutate(sub_grade = 
-                fct_relevel(
+  step_mutate(sub_grade = as.character(sub_grade),
+                sub_grade =
                         case_when(
-                          sub_grade %in% ("A1", "A2", "A3", "A4", "A5")   ~ "A",
-                          sub_grade %in% ("B1", "B2", "B3", "B4", "B5")   ~ "B",
-                          sub_grade %in% ("C1", "C2", "C3", "C4", "C5")   ~ "C",
-                          sub_grade %in% ("D1", "D2", "D3", "D4", "D5")   ~ "D",
-                          sub_grade %in% ("E1", "E2", "E3", "E4", "E5")   ~ "E",
-                          sub_grade %in% ("F1", "F2", "F3", "F4", "F5")   ~ "F",
-                          sub_grade %in% ("G1", "G2", "G3", "G4", "G5")   ~ "G",
-                          TRUE ~ subgrade),
-                          "A","B","C","D","E", "F", "G")) %>%
+                          sub_grade %in% paste("A",1:6, sep = "") ~ "A",
+                          sub_grade %in% paste("B",1:6, sep = "") ~ "B",
+                          sub_grade %in% paste("C",1:6, sep = "") ~ "C",
+                          sub_grade %in% paste("D",1:6, sep = "") ~ "D",
+                          sub_grade %in% paste("E",1:6, sep = "") ~ "E",
+                          sub_grade %in% paste("F",1:6, sep = "") ~ "F",
+                          sub_grade %in% paste("G",1:6, sep = "") ~ "G",
+                          TRUE ~ sub_grade), 
+              sub_grade = as.factor(sub_grade)) %>%
   step_dummy(all_nominal(), 
              -all_outcomes()) %>% 
   step_normalize(all_predictors(), 
@@ -304,6 +304,8 @@ For this week, I want you to answer the following questions:
 ## Function Friday problems
 
 
+**TIDY TEXT QUESTIONS** 
+
 ```{r}
 library(gutenbergr)
 library(tidytext)
@@ -314,22 +316,82 @@ library(ggplot2)
 ```
 
 # 1. Pick a book of your choice 
-Use `gutenberg_works()` to filter out a book of your choice and replace 768 with `gutenberg_id` to download the text of the book. Below is an exmple. 
+Use `gutenberg_works()` to filter out a book of your choice and replace 768 with `gutenberg_id` to download the text of the book. Below is an example. 
+
+```{r}
+Decl <- gutenberg_works(title == "The Declaration of Independence of the United States of America")
+
+Decl
+```
+```{r}
+books <- gutenberg_works() 
+D_of_I <- gutenberg_download(1, mirror = "http://mirrors.xmission.com/gutenberg/") 
+```
 
 
 # 2. Use unnest_token to clean the data 
 Use unnest_token to split the line into words. 
 
+```{r}
+common_words_D_of_I <- D_of_I %>%
+  unnest_tokens(word, text)
+```
+
+```{r}
+common_words_D_of_I
+```
+
 
 # 3. Filter out the stop words
 Filter out the stop words from the previous step. 
+
+```{r}
+common_words_D_of_I <- D_of_I %>%
+  unnest_tokens(word, text) %>%
+  count(word, sort = TRUE)
+
+head(common_words_D_of_I, 15)
+```
+
+
+```{r}
+common_words_D_of_I_sub <- D_of_I %>%
+  unnest_tokens(word, text) %>% 
+  anti_join(stop_words, by = "word") %>% 
+  count(word, sort = TRUE) 
+```
+
 
 
 # 4. Most commonly used words
 Find out 15 most frequently used words in the book, after filtering out the stop words. 
 
+
+```{r}
+new_D_of_I_common <- head(common_words_D_of_I_sub, 15)
+new_D_of_I_common
+```
+
+
 # 5. Use get_sentiment to create a visualization of your choice
-Play with get_sentiment and create a visualization of your choice. Feel free to use your cleaned book from previous step. 
+Play with get_sentiment and create a visualization of your choice. Feel free to use your cleaned book from previous step.
+
+```{r}
+negative <- get_sentiments("bing") %>% 
+  filter(sentiment == "negative")
+negative
+```
+```{r}
+cleaned_books %>% 
+  semi_join(positive, by = "word") %>%
+  count(word, sort = TRUE) %>%
+  slice(0:15) %>% 
+  ggplot(aes(x = n , y = reorder(word,n))) +
+  geom_col()
+```
+
+
+**Ray______** 
 
 
 ## Coded Bias
