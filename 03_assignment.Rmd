@@ -24,6 +24,7 @@ library(moderndive)        # for King County housing data
 library(vip)               # for variable importance plots
 library(patchwork)         # for combining plots nicely
 library(ranger)
+library(xgboost)
 theme_set(theme_minimal()) # Lisa's favorite theme
 ```
 
@@ -221,11 +222,22 @@ best_param <- lasso_tune %>%
   select_best(metric = "accuracy")
 best_param
 ```
-**BEST MODEL ACCURACY = 0.7336347**
 
-**Area under the roc curve = ___________________________________ **
+```{r}
+lasso_tune %>%
+  select_best(metric = "accuracy")
 
+lasso_tune %>%
+  show_best(metric = "accuracy") %>%
+  filter(.config == "Preprocessor1_Model09")
 
+lasso_tune %>%
+  show_best(metric = "roc_auc") %>%
+  filter(.config == "Preprocessor1_Model09")
+```
+**ACCURACY = 0.7336347**
+
+**ROC AUC = 0.7487696 **
 
 
 6. Set up the recipe and the pre-processing steps to build a random forest model. You shouldn't have to do as many steps. The only steps you should need to do are making all integers numeric and the up and down sampling. 
@@ -260,30 +272,18 @@ rf_workflow <- workflow() %>%
 8. Set up the model tuning for both the `mtry` and `min_n` parameters. Be sure to add the `control_stack_grid()` for the `control` argument so we can use these results later when we stack. Use only 3 levels in the grid. For the `mtry` parameter, you need to put `finalize(mtry(), lending_training %>% select(-Class))` in as an argument instead of just `mtry()`, where `lending_training` is the name of your training data. This is because the `mtry()` grid will otherwise have unknowns in it. This part can take a while to run.
 
 ```{r}
-ctrl_grid <- control_stack_grid()
-
-rf_grid <- grid_regular(
-  mtry(finalize(mtry(), lending_training %>% select(-Class))),
-  min_n(0, 100),
+rf_penalty_grid <- grid_regular(
+  finalize(mtry(), lending_training %>% select(-Class)),
+  min_n(),
   levels = 3)
 
 
-regular_res <- tune_grid(
-  rf_workflow,
-  resamples = lending_cv,
-  grid = rf_grid, 
-  ctrl_grid
-)
-
-```
-
-```{r}
 rf_tune <- 
   rf_workflow %>% 
-  tune_grid(finalize(mtry(), lending_training %>% select(-Class)), 
-    resamples = lending_cv,
-    grid = min_n_grid_new,
-    control = ctrl_grid)
+  tune_grid(
+    resamples = lending_cv, 
+    grid = rf_penalty_grid, 
+    control = control_stack_grid())
 
 ```
 
@@ -291,65 +291,121 @@ rf_tune <-
 
 ```{r}
 
+rf_tune %>%
+  select_best(metric = "accuracy")
+
+rf_tune %>%
+  show_best(metric = "accuracy") %>%
+  filter(.config == "Preprocessor1_Model2")
+
+rf_tune %>%
+  show_best(metric = "roc_auc") %>%
+  filter(.config == "Preprocessor1_Model2")
+
 ```
+
+
+**Accuracy = 0.924379**
+
+**ROC AUC = 0.7257118**
 
 
 10. Next, we will fit a boosted tree using xgboost. We will only tune the `learn_rate` parameter. I have specified the model, recipe, and workflow below already (uncomment the code - you can this by highlighting it and then in the code tab at the top, choose comment/uncomment lines). You need to set up a grid of ten values for the tuning parameter and tune the model. Be sure to add the `control_stack_grid()` for the `control` argument so we can use these results later when we stack.
 
 ```{r}
-# xgboost_spec <- 
-#   boost_tree(
-#     trees = 1000, 
-#     min_n = 5, 
-#     tree_depth = 2, 
-#     learn_rate = tune(), 
-#     loss_reduction = 10^-5, 
-#     sample_size = 1) %>% 
-#   set_mode("classification") %>% 
-#   set_engine("xgboost") 
-# 
-# xgboost_recipe <- recipe(formula = Class ~ ., data = lending_training) %>% 
-#   step_upsample(Class, over_ratio = .5) %>% 
-#   step_downsample(Class, under_ratio = 1) %>% 
-#   step_mutate_at(all_numeric(), 
-#                  fn = ~as.numeric(.)) %>% 
-#   step_novel(all_nominal_predictors()) %>% 
-#   step_dummy(all_nominal_predictors(), one_hot = TRUE) %>% 
-#   step_zv(all_predictors()) 
-# 
-# xgboost_workflow <- 
-#   workflow() %>% 
-#   add_recipe(xgboost_recipe) %>% 
-#   add_model(xgboost_spec) 
+xgboost_spec <-
+  boost_tree(
+    trees = 1000,
+    min_n = 5,
+    tree_depth = 2,
+    learn_rate = tune(),
+    loss_reduction = 10^-5,
+    sample_size = 1) %>%
+  set_mode("classification") %>%
+  set_engine("xgboost")
+
+xgboost_recipe <- recipe(formula = Class ~ ., data = lending_training) %>%
+  step_upsample(Class, over_ratio = .5) %>%
+  step_downsample(Class, under_ratio = 1) %>%
+  step_mutate_at(all_numeric(),
+                 fn = ~as.numeric(.)) %>%
+  step_novel(all_nominal_predictors()) %>%
+  step_dummy(all_nominal_predictors(), one_hot = TRUE) %>%
+  step_zv(all_predictors())
+
+xgboost_workflow <-
+  workflow() %>%
+  add_recipe(xgboost_recipe) %>%
+  add_model(xgboost_spec)
 
 set.seed(494)
 registerDoParallel() 
 
-# boost_tune <- 
+boost_penalty_grid <- grid_regular(
+  learn_rate(),
+  levels = 10)
 
+boost_tune <- xgboost_workflow %>% 
+    tune_grid(
+    resamples = lending_cv, 
+    grid = boost_penalty_grid, 
+    control = control_stack_grid())
 ```
 
 11. Find the best tuning parameters. What are the accuracy and area under the ROC curve for the model with those tuning parameters?
 
 ```{r}
+boost_tune %>%
+  select_best(metric = "accuracy")
+
+boost_tune %>%
+  collect_metrics(metric = "roc_auc") %>%
+  filter(.config == "Preprocessor1_Model10")
+
 ```
 
+**ACCURACY = 0.8051965**
+
+**ROC AUC = 0.6943527**
 
 12. Create a model stack with the candidate models from the previous parts of the exercise and use the `blend_predictions()` function to find the coefficients of the stacked model. Create a plot examining the performance metrics for the different penalty parameters to assure you have captured the best one. If not, adjust the penalty. (HINT: use the `autoplot()` function). Which models are contributing most?
 
 ```{r}
-#lending_stack <- 
+lending_stack <- stacks() %>% 
+  add_candidates(lasso_tune) %>% 
+  add_candidates(rf_tune) %>% 
+  add_candidates(boost_tune)
 ```
 
 ```{r}
-#lending_blend <-
+lending_blend <- lending_stack %>%
+            blend_predictions()
+
+lending_blend
 ```
+
+
+**The greatest contributors to the stacking are the log_reg lasso tune by the most followed by random forest tune (whose impact is half of that of the log reg lasso).**
+
+
+```{r}
+lending_blend$metrics %>% 
+  filter(.metric == "accuracy")
+```
+
+```{r}
+autoplot(lending_blend)
+
+```
+
+**No adjustment necessary as the num of members is minimized all while maximizing accuracy and roc auc**
 
 
 13. Fit the final stacked model using `fit_members()`. Apply the model to the training data. Compute the accuracy, construct a confusion matrix, and create a density plot with `.pred_good` on the x-axis (the probability of a response of "good"), filled by `Class`. Comment on what you see. 
 
 ```{r}
-#lending_final_stack <- 
+lending_final_stack <- lending_blend %>%
+                    fit_members(data = lending_training)
 ```
 
 
@@ -402,9 +458,7 @@ For this week, I want you to answer the following questions:
 
 We will be watching some of the [Coded Bias](https://www.codedbias.com/) film together on Thursday. It is streaming on Netflix. Write a short reflection. If you want some prompts, reflect on: 
 
-What part of the film impacted you the most? 
 Was there a part that surprised you and why? 
-What emotions did you experience while watching?
 
 **_________________________________**
 
