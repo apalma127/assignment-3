@@ -391,11 +391,8 @@ autoplot(lending_blend)
 **No adjustment necessary as the num of members is minimized all while maximizing accuracy and roc auc**
 
 
-13. Fit the final stacked model using `fit_members()`. Apply the model to the training data. 
+*13.* Fit the final stacked model using `fit_members()`. Apply the model to the training data. 
 
-Compute the accuracy, 
-
-construct a confusion matrix, 
 
 ```{r}
 lending_final_stack <- lending_blend %>%
@@ -409,20 +406,28 @@ lending_final_stack$metrics %>%
 
 **Accuracy = 0.9488284**
 
+
+```{r}
+preds <- 
+  lending_final_stack %>%
+  predict(new_data = lending_training) %>%
+  mutate(actual = lending_training$Class)
+
+conf_mat(data = preds, truth = actual, estimate = .pred_class)
+accuracy(data = preds, truth = actual, estimate = .pred_class)
+
+```
+
+
 ```{r}
 lending_final_stack %>%
-  conf_mat(obs, pred)
-
+  predict(new_data = lending_training, type = "prob") %>%
+  bind_cols(lending_training) %>%
+  ggplot(aes(x = .pred_good, fill = Class)) +
+  geom_density(alpha = 0.5, color = NA)
 ```
 
-
-```{r}
-ggplot(lending_final_stack, aes(x = .pred_good, fill = Class)) +
-  geom_density() 
-```
-
-and create a density plot with `.pred_good` on the x-axis (the probability of a response of "good"), filled by `Class`. Comment on what you see. 
-
+Comment: **You can see that the models confidence in good class predictions is present in the skew left nature of the good class and how it is lumped around .pred_good = 0.95.  The terrible predictions of bad are present and can be seen with the very low and taper left curve for bad that really never peaks anywhere because of how poorly predicted it was...**
 
 
 *14.* In the previous problem, you saw that although the accuracy was quite high, the true negative rate (aka sensitivity) was terrible. It's common to see this when one of the classes has low representation. What we want to do now is investigate what happens in each of our models. Below I've provided code to investigate the lasso model (where `lasso_tune` is the name of my tuning step). Do similar things for the random forest and xgboost models. 
