@@ -35,8 +35,6 @@ data("lending_club")
 
 ## Put it on GitHub!        
 
-**Task**: When you are finished with the assignment, post a link below to the GitHub repo for the assignment. Make sure the link goes to a spot in the repo where I can easily find this assignment. For example, if you have a website with a blog and post the assignment as a blog post, link to the post's folder in the repo. As an example, I've linked to my GitHub stacking material [here](https://github.com/llendway/ads_website/tree/master/_posts/2021-03-22-stacking).
-
 Website Link: **https://github.com/apalma127/assignment-3**
 
 ## Modeling
@@ -45,7 +43,7 @@ The outcome we are interested in predicting is `Class`. And according to the dat
 
 **Tasks:** 
 
-1. Explore the data, concentrating on examining distributions of variables and examining missing values. 
+*1.* Explore the data, concentrating on examining distributions of variables and examining missing values. 
 
 **Quantitative Variables**
 
@@ -63,9 +61,11 @@ lending_club %>%
 
 Points of Interest:
 
--
--
--
+- all_util and revol_util are pretty normally shaped which is good
+- acc_now_delinq looks like all values are clustered at or around 0 ... remove variable maybe? Same w delinq amount.... or are they MISSING???
+- int_rate tapers a little ... skew right but nothing crazy
+- literally every single other quant variable skews right and should get some adjusting
+- inq_last_6mths appears to be more categorical than quant...
 
 
 **Categorical Variables**
@@ -85,9 +85,10 @@ select(where(is.factor)) %>%
 
 Points of Interest:
 
--
--
--
+- for CLASS -- IMPORTANT -- appears to be wayyyyy too much good vs bad.... need to address in recipe or prior
+- too many sub grade categories ... should aim to make more concise
+- emp length is pretty evenly distributed .... 
+- term appears to be way more skewed to 36 than 60
 
 ```{r}
 lending_club %>%
@@ -95,28 +96,20 @@ lending_club %>%
 ```
 
 
-2. Split the data into training and test, putting 75\% in the training data. Stratify by `Class` (add `strata = `Class` to the `initial_split()` function).
+*2.* Split the data into training and test, putting 75\% in the training data. Stratify by `Class` (add `strata = `Class` to the `initial_split()` function).
 
 ```{r}
 set.seed(494) # for reproducibility
 
 lending_split <- initial_split(lending_club, 
-                             prop = .75, starta = "Class")
+                             prop = .75, strata = "Class")
 
 lending_training <- training(lending_split)
 lending_test <- testing(lending_split)
 ```
 
 
-3. Set up the recipe and the pre-processing steps to build a lasso model. Some steps you should take:
-
-* Use `step_upsample()` from the `themis` library to upsample the "bad" category so that it is 50\% of the "good" category. Do this by setting `over_ratio = .5`.
-
-* Use `step_downsample()` from the `themis` library to downsample the "good" category so the bads and goods are even - set `under_ratio = 1`. Make sure to do this step AFTER `step_upsample()`.  
-
-* Make all integer variables numeric (I'd highly recommend using `step_mutate_at()` and using the `all_numeric()` helper or this will be a lot of code). This step might seem really weird right now, but we'll want to do this for the model interpretation we'll do in a later assignment.  
-
-* Think about grouping factor variables with many levels.  
+*3.* Set up the recipe and the pre-processing steps to build a lasso model. Some steps you should take:
 
 Once you have that, use `prep()`, `juice()`, and `count()` to count the number of observations in each class. They should be equal. This dataset will be used in building the model, but the data without up and down sampling will be used in evaluation.
 
@@ -154,7 +147,7 @@ lasso_recipe %>%
 ```
 
 
-4. Set up the lasso model and workflow. We will tune the `penalty` parameter.
+*4.* Set up the lasso model and workflow. We will tune the `penalty` parameter.
 
 ```{r}
 lasso_mod  <- 
@@ -169,7 +162,7 @@ lasso_wf <-  workflow() %>%
 ```
 
 
-5. Set up the model tuning for the `penalty` parameter. Be sure to add the `control_stack_grid()` for the `control` argument so we can use these results later when we stack. Find the accuracy and area under the roc curve for the model with the best tuning parameter.  Use 5-fold cv.
+*5.* Set up the model tuning for the `penalty` parameter. Be sure to add the `control_stack_grid()` for the `control` argument so we can use these results later when we stack. Find the accuracy and area under the roc curve for the model with the best tuning parameter.  Use 5-fold cv.
 
 Tune:
 
@@ -235,15 +228,17 @@ lasso_tune %>%
   show_best(metric = "roc_auc") %>%
   filter(.config == "Preprocessor1_Model09")
 ```
-**ACCURACY = 0.7336347**
 
-**ROC AUC = 0.7487696 **
+**ACCURACY = 0.7183403**
+
+**ROC AUC = 0.7348244 **
 
 
-6. Set up the recipe and the pre-processing steps to build a random forest model. You shouldn't have to do as many steps. The only steps you should need to do are making all integers numeric and the up and down sampling. 
+*6.* Set up the recipe and the pre-processing steps to build a random forest model. You shouldn't have to do as many steps. The only steps you should need to do are making all integers numeric and the up and down sampling. 
 
 ```{r}
 set.seed(456)
+
 rf_recipe <-  
   recipe(Class ~ ., 
         data = lending_training) %>% 
@@ -255,7 +250,7 @@ rf_recipe <-
 ```
 
 
-7. Set up the random forest model and workflow. We will tune the `mtry` and `min_n` parameters and set the number of trees, `trees`, to 100 (otherwise the next steps take too long).
+*7.* Set up the random forest model and workflow. We will tune the `mtry` and `min_n` parameters and set the number of trees, `trees`, to 100 (otherwise the next steps take too long).
 
 ```{r}
 rf_model <- rand_forest(mtry = tune(), 
@@ -269,7 +264,7 @@ rf_workflow <- workflow() %>%
   add_model(rf_model) 
 ```
 
-8. Set up the model tuning for both the `mtry` and `min_n` parameters. Be sure to add the `control_stack_grid()` for the `control` argument so we can use these results later when we stack. Use only 3 levels in the grid. For the `mtry` parameter, you need to put `finalize(mtry(), lending_training %>% select(-Class))` in as an argument instead of just `mtry()`, where `lending_training` is the name of your training data. This is because the `mtry()` grid will otherwise have unknowns in it. This part can take a while to run.
+*8.* Set up the model tuning for both the `mtry` and `min_n` parameters. Be sure to add the `control_stack_grid()` for the `control` argument so we can use these results later when we stack. Use only 3 levels in the grid. For the `mtry` parameter, you need to put `finalize(mtry(), lending_training %>% select(-Class))` in as an argument instead of just `mtry()`, where `lending_training` is the name of your training data. This is because the `mtry()` grid will otherwise have unknowns in it. This part can take a while to run.
 
 ```{r}
 rf_penalty_grid <- grid_regular(
@@ -287,27 +282,22 @@ rf_tune <-
 
 ```
 
-9. Find the best tuning parameters. What are the accuracy and area under the ROC curve for the model with those tuning parameters?
+*9.* Find the best tuning parameters. What are the accuracy and area under the ROC curve for the model with those tuning parameters?
 
 ```{r}
-
 rf_tune %>%
   select_best(metric = "accuracy")
 
 rf_tune %>%
-  show_best(metric = "accuracy") %>%
-  filter(.config == "Preprocessor1_Model2")
-
-rf_tune %>%
-  show_best(metric = "roc_auc") %>%
+  collect_metrics(metric = "accuracy") %>%
   filter(.config == "Preprocessor1_Model2")
 
 ```
 
 
-**Accuracy = 0.924379**
+**Accuracy = 0.9284379**
 
-**ROC AUC = 0.7257118**
+**ROC AUC = 0.7183883**
 
 
 10. Next, we will fit a boosted tree using xgboost. We will only tune the `learn_rate` parameter. I have specified the model, recipe, and workflow below already (uncomment the code - you can this by highlighting it and then in the code tab at the top, choose comment/uncomment lines). You need to set up a grid of ten values for the tuning parameter and tune the model. Be sure to add the `control_stack_grid()` for the `control` argument so we can use these results later when we stack.
@@ -408,10 +398,29 @@ lending_final_stack <- lending_blend %>%
                     fit_members(data = lending_training)
 ```
 
+```{r}
+lending_final_stack$metrics %>% 
+  filter(.metric == "accuracy")
+```
 
-14. In the previous problem, you saw that although the accuracy was quite high, the true negative rate (aka sensitivity) was terrible. It's common to see this when one of the classes has low representation. What we want to do now is investigate what happens in each of our models. Below I've provided code to investigate the lasso model (where `lasso_tune` is the name of my tuning step). Do similar things for the random forest and xgboost models. If you'd like to have a better true negative rate, which models would you choose and how would you go about doing this in a less manual way (you don't need to write code to do it - just describe it in words). Be sure to remove the `eval=FALSE` when you are finished.
+**Accuracy = 0.9488284**
 
-```{r, eval=FALSE}
+```{r}
+lending_final_stack %>%
+  conf_mat(obs, pred)
+
+```
+
+
+```{r}
+ggplot(lending_final_stack, aes(x = .pred_good, fill = Class)) +
+  geom_density() 
+```
+
+
+14. In the previous problem, you saw that although the accuracy was quite high, the true negative rate (aka sensitivity) was terrible. It's common to see this when one of the classes has low representation. What we want to do now is investigate what happens in each of our models. Below I've provided code to investigate the lasso model (where `lasso_tune` is the name of my tuning step). Do similar things for the random forest and xgboost models. 
+
+```{r}
 lasso_tune %>% 
   collect_predictions() %>% 
   group_by(id, penalty) %>% 
@@ -422,16 +431,48 @@ lasso_tune %>%
   summarize(across(accuracy:true_pos_rate, mean))
 ```
 
+```{r}
+rf_tune %>% 
+  collect_predictions() %>% 
+  group_by(id, mtry, min_n) %>% 
+  summarize(accuracy = sum((Class == .pred_class))/n(),
+            true_neg_rate = sum(Class == "bad" & .pred_class == "bad")/sum(Class == "bad"),
+            true_pos_rate = sum(Class == "good" & .pred_class == "good")/sum(Class == "good")) %>% 
+  group_by(mtry, min_n) %>% 
+  summarize(across(accuracy:true_pos_rate, mean))
+```
 
-## Shiny app
+```{r}
+boost_tune %>% 
+  collect_predictions() %>% 
+  group_by(id, learn_rate) %>% 
+  summarize(accuracy = sum((Class == .pred_class))/n(),
+            true_neg_rate = sum(Class == "bad" & .pred_class == "bad")/sum(Class == "bad"),
+            true_pos_rate = sum(Class == "good" & .pred_class == "good")/sum(Class == "good")) %>% 
+  group_by(learn_rate) %>% 
+  summarize(across(accuracy:true_pos_rate, mean))
+```
+
+If you'd like to have a better true negative rate, which models would you choose and how would you go about doing this in a less manual way (you don't need to write code to do it - just describe it in words). 
+
+
+I would choose:
+
+Lasso -- 
+
+RF -- 
+
+Boost -- 
+
+
+**One way to automate: when selecting metrics and tuning parameters, I would set some  
+
+
+## Shiny app - DONE
 
 Shiny links on our course [Resource](https://advanced-ds-in-r.netlify.app/resources.html)
 
 **Tasks:**
-
-In the future, you are going to create an app that allows a user to explore how the predicted probability of a loan being paid back (or maybe just the predicted class - either "good" or "bad") changes depending on the values of the predictor variables.
-
-For this week, I want you to answer the following questions:
 
 1. How can you save a model you built to use it later (like in the shiny app you'll create)?
 
@@ -445,7 +486,7 @@ For this week, I want you to answer the following questions:
 3. You'll want the user to be able to choose values for each variable in the model. How will you come up with the values they can choose for quantitative and categorical data? Give one example for each, either using code or in words.  
 
 
-**I can use graphical processes like the preprocessing work we have done for quantitative and categorical variables. By doing so, I cna eye ball right off the bat some ranges of inputs for things, especially binary outputs.  I cna use the count function for categorical variables to see the breakdown and fro quantitative I can sort the data and/or simply find the min and max values from the category to establish a user input range.**
+**I can use graphical processes like the preprocessing work we have done for quantitative and categorical variables. By doing so, I can eye ball right off the bat some ranges of inputs for things, especially binary outputs.  I can use the count function for categorical variables to see the breakdown and for quantitative I can sort the data and/or simply find the min and max values from the category to establish a user input range.**
 
 
 4. You will need to populate each variable with an initial value. Which value will you choose? Is there a nice way to do this programatically (ie. with code)?
@@ -454,15 +495,9 @@ For this week, I want you to answer the following questions:
 **For each variable, I think it would make sense to start with the neutral case and go from there to avoid any appearance of guiding the user.  This would mean all categories that are extra and that come after receiving a loan would be set to 0 ie delinq variables, total_bal, open_il...others like funded amt, interest rate, and annual income will be randomly generated in a reasonable range allowing for the other variables to play off that.  Programmatically, we can set some to 0 at the start easily and others can simply be randomized using random generator**
 
 
-## Coded Bias
+## Coded Bias - DONE
 
-We will be watching some of the [Coded Bias](https://www.codedbias.com/) film together on Thursday. It is streaming on Netflix. Write a short reflection. If you want some prompts, reflect on: 
+We will be watching some of the [Coded Bias](https://www.codedbias.com/) film together on Thursday. It is streaming on Netflix. Write a short reflection.
+ 
 
-Was there a part that surprised you and why? 
-
-**_________________________________**
-
-
-**REMEMBER TO ADD YOUR GITHUB LINK AT THE TOP OF THE PAGE AND UNCOMMENT THE `knitr` OPTIONS.**
-
-
+**As a poli sci major, I was most intrigued by the Hong Kong pro-democracy protests and how they eliminated the effects of facial recognition in the streets.  First off, I was unaware of how prominent the security forces in Hong Kong were displaying facial recognition tech on the streets.  I can't believe they were flaunting it.  I also can't believe they were using it to apprehend those peacefully protesting for freedom and their own sovereignty.  I am even more surprised and impressed by the ingenuity of this brave people to do whatever it took to deter and block the facial recognition from aiding in their kidnapping.  It truly is amazing to see such marginalized people (by the PRC) step up to the plate and defeat an algorithm that was being used for bad.**
