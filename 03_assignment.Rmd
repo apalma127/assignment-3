@@ -300,7 +300,7 @@ rf_tune %>%
 **ROC AUC = 0.7183883**
 
 
-10. Next, we will fit a boosted tree using xgboost. We will only tune the `learn_rate` parameter. I have specified the model, recipe, and workflow below already (uncomment the code - you can this by highlighting it and then in the code tab at the top, choose comment/uncomment lines). You need to set up a grid of ten values for the tuning parameter and tune the model. Be sure to add the `control_stack_grid()` for the `control` argument so we can use these results later when we stack.
+*10.* Next, we will fit a boosted tree using xgboost. We will only tune the `learn_rate` parameter. I have specified the model, recipe, and workflow below already (uncomment the code - you can this by highlighting it and then in the code tab at the top, choose comment/uncomment lines). You need to set up a grid of ten values for the tuning parameter and tune the model. Be sure to add the `control_stack_grid()` for the `control` argument so we can use these results later when we stack.
 
 ```{r}
 xgboost_spec <-
@@ -342,23 +342,23 @@ boost_tune <- xgboost_workflow %>%
     control = control_stack_grid())
 ```
 
-11. Find the best tuning parameters. What are the accuracy and area under the ROC curve for the model with those tuning parameters?
+*11.* Find the best tuning parameters. What are the accuracy and area under the ROC curve for the model with those tuning parameters?
 
 ```{r}
 boost_tune %>%
   select_best(metric = "accuracy")
 
 boost_tune %>%
-  collect_metrics(metric = "roc_auc") %>%
+  collect_metrics(metric = "accuracy") %>%
   filter(.config == "Preprocessor1_Model10")
 
 ```
 
-**ACCURACY = 0.8051965**
+**ACCURACY = 0.8037070**
 
-**ROC AUC = 0.6943527**
+**ROC AUC = 0.6816321**
 
-12. Create a model stack with the candidate models from the previous parts of the exercise and use the `blend_predictions()` function to find the coefficients of the stacked model. Create a plot examining the performance metrics for the different penalty parameters to assure you have captured the best one. If not, adjust the penalty. (HINT: use the `autoplot()` function). Which models are contributing most?
+*12.* Create a model stack with the candidate models from the previous parts of the exercise and use the `blend_predictions()` function to find the coefficients of the stacked model. Create a plot examining the performance metrics for the different penalty parameters to assure you have captured the best one. If not, adjust the penalty. (HINT: use the `autoplot()` function). 
 
 ```{r}
 lending_stack <- stacks() %>% 
@@ -375,7 +375,7 @@ lending_blend
 ```
 
 
-**The greatest contributors to the stacking are the log_reg lasso tune by the most followed by random forest tune (whose impact is half of that of the log reg lasso).**
+**The greatest contributors to the stacking are the log_reg lasso tune (1_09, by far the most compared to the rest) followed by random forest tune (1_4, whose impact is half of that of the log reg lasso).  Overall, the log_reg contributes the most by far...**
 
 
 ```{r}
@@ -391,7 +391,11 @@ autoplot(lending_blend)
 **No adjustment necessary as the num of members is minimized all while maximizing accuracy and roc auc**
 
 
-13. Fit the final stacked model using `fit_members()`. Apply the model to the training data. Compute the accuracy, construct a confusion matrix, and create a density plot with `.pred_good` on the x-axis (the probability of a response of "good"), filled by `Class`. Comment on what you see. 
+13. Fit the final stacked model using `fit_members()`. Apply the model to the training data. 
+
+Compute the accuracy, 
+
+construct a confusion matrix, 
 
 ```{r}
 lending_final_stack <- lending_blend %>%
@@ -417,8 +421,11 @@ ggplot(lending_final_stack, aes(x = .pred_good, fill = Class)) +
   geom_density() 
 ```
 
+and create a density plot with `.pred_good` on the x-axis (the probability of a response of "good"), filled by `Class`. Comment on what you see. 
 
-14. In the previous problem, you saw that although the accuracy was quite high, the true negative rate (aka sensitivity) was terrible. It's common to see this when one of the classes has low representation. What we want to do now is investigate what happens in each of our models. Below I've provided code to investigate the lasso model (where `lasso_tune` is the name of my tuning step). Do similar things for the random forest and xgboost models. 
+
+
+*14.* In the previous problem, you saw that although the accuracy was quite high, the true negative rate (aka sensitivity) was terrible. It's common to see this when one of the classes has low representation. What we want to do now is investigate what happens in each of our models. Below I've provided code to investigate the lasso model (where `lasso_tune` is the name of my tuning step). Do similar things for the random forest and xgboost models. 
 
 ```{r}
 lasso_tune %>% 
@@ -453,19 +460,18 @@ boost_tune %>%
   summarize(across(accuracy:true_pos_rate, mean))
 ```
 
-If you'd like to have a better true negative rate, which models would you choose and how would you go about doing this in a less manual way (you don't need to write code to do it - just describe it in words). 
 
 
 I would choose:
 
-Lasso -- 
+**Lasso -- penalty == 7.742637e-02, accuracy = 0.7183403, w PEAK accuracy, neg_rate, and pos rate**
 
-RF -- 
+**RF -- mtry == 1, min_n == 40, accuracy = 0.8223750, neg_rate is maximized and pos rate and quite high still**
 
-Boost -- 
+**Boost -- learn_rate == 1e-02, accuracy = 0.70562681 and neg_rate and pos_rate are maximized w a moderately strong accuracy**
 
 
-**One way to automate: when selecting metrics and tuning parameters, I would set some  
+**One way to automate: when selecting metrics and tuning parameters, I would filter for true_neg_rate being higher than what I want to improve upon... with also a minimum basement val for accuracy to ensure you are not forfeiting a lot of accuracy too.**
 
 
 ## Shiny app - DONE
